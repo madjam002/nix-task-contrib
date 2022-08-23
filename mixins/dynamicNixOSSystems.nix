@@ -30,7 +30,7 @@ let
           $systemOut
 
         ssh -o BatchMode=yes "$remote" \
-          "nix-env -p /nix/var/nix/profiles/system --set $systemOut && $systemOut/bin/switch-to-configuration boot"
+          "sudo nix-env -p /nix/var/nix/profiles/system --set $systemOut && sudo $systemOut/bin/switch-to-configuration boot"
 
         echo "Success"
         ;;
@@ -48,7 +48,7 @@ let
           $systemOut
 
         ssh -o BatchMode=yes "$remote" \
-          "nix-env -p /nix/var/nix/profiles/system --set $systemOut && $systemOut/bin/switch-to-configuration switch"
+          "sudo nix-env -p /nix/var/nix/profiles/system --set $systemOut && sudo $systemOut/bin/switch-to-configuration switch"
 
         echo "Success"
         ;;
