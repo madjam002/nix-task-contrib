@@ -5,6 +5,8 @@ with builtins;
 
 {
   id ? null,
+  deps ? {},
+  getOutput ? null,
   src,
   before ? [],
   backend ? {},
@@ -49,6 +51,7 @@ let
 
       export TF_CLI_ARGS_plan="-var-file ${variablesFile}"
       export TF_CLI_ARGS_apply="-var-file ${variablesFile}"
+      export TF_CLI_ARGS_import="-var-file ${variablesFile}"
       export TF_CLI_ARGS_init="-backend-config=$TMPDIR/backendConfig.json"
       export TF_DATA_DIR="$TMPDIR/.terraform"
       export NIX_TERRAFORM_LOCKFILE_PATH="$TMPDIR/.terraform.lock.hcl"
@@ -79,6 +82,8 @@ let
         echo "Non-interactive terminal, will apply any changes immediately"
         terraform apply -input=false -auto-approve
       fi
+
+      taskSetOutput "$(terraform output -json | ${pkgs.jq}/bin/jq 'with_entries(.value |= .value)')"
     '';
 
   needsToBeLazy = isFunction backend || isFunction before || isFunction tfvars;
@@ -94,6 +99,8 @@ let
 in
 lib.mkTask {
   inherit id;
+  inherit deps;
+  inherit getOutput;
   dir = src;
   path = with pkgs; [
     terraformPkg

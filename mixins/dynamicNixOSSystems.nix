@@ -10,15 +10,18 @@ let
 
     mode="$4" # switch, boot, switch-unsafe (defaults to switch)
     remote="$2"
-    remoteEscaped="$(jq --null-input -cM --arg remote $remote '$remote')"
-    argsJsonEscaped="$(jq --null-input -cM --arg jsonIn $3 '$jsonIn')"
+    remoteEscaped="$(jq --null-input -cM --arg remote "$remote" '$remote')"
+    argsJsonEscaped="$(jq --null-input -cM --arg jsonIn "$3" '$jsonIn')"
+
+    depsOut="$(taskGetDeps)"
+    depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
 
     case "$mode" in
       "boot")
         echo "Deploying system for activation on next boot"
 
         systemDrv="$(nix eval --raw \
-          --apply "a: (a (builtins.fromJSON $argsJsonEscaped)).config.system.build.toplevel.drvPath" \
+          --apply "a: (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath" \
           $NIX_TASK_FLAKE_PATH.dynamicNixOSSystems.$1)"
 
         systemOut="$(nix-store --realise $systemDrv)"
@@ -36,7 +39,7 @@ let
         echo "Ctrl+C now if you would like to cancel this operation"
 
         systemDrv="$(nix eval --raw \
-          --apply "a: (a (builtins.fromJSON $argsJsonEscaped)).config.system.build.toplevel.drvPath" \
+          --apply "a: (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath" \
           $NIX_TASK_FLAKE_PATH.dynamicNixOSSystems.$1)"
 
         systemOut="$(nix-store --realise $systemDrv)"
@@ -49,13 +52,20 @@ let
 
         echo "Success"
         ;;
+      "build")
+        systemDrv="$(nix eval --raw \
+          --apply "a: (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath" \
+          $NIX_TASK_FLAKE_PATH.dynamicNixOSSystems.$1)"
+
+        nix-store --realise $systemDrv
+        ;;
       *)
         echo "Deploying system using Nixus, will rollback if there are any issues"
 
         nixApplyExpr=$(cat <<EOF
 flake:
   let
-    systemConfig = (flake.dynamicNixOSSystems.$1 (builtins.fromJSON $argsJsonEscaped));
+    systemConfig = (flake.dynamicNixOSSystems.$1 ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped)));
   in
   (flake.dynamicDeployScript {
     out = systemConfig.config.system.build.toplevel;
@@ -87,11 +97,14 @@ EOF
     export PATH=$PATH:${pkgs.nix}/bin:${pkgs.git}/bin:${pkgs.jq}/bin:${pkgs.openssh}/bin
 
     inData="$(jq -r -cM)"
-    argsJsonEscaped="$(jq --null-input -cM --arg jsonIn $inData '$jsonIn')"
-    nameEscaped="$(jq --null-input -cM --arg nameIn $1 '$nameIn')"
+    argsJsonEscaped="$(jq --null-input -cM --arg jsonIn "$inData" '$jsonIn')"
+    nameEscaped="$(jq --null-input -cM --arg nameIn "$1" '$nameIn')"
+
+    depsOut="$(taskGetDeps)"
+    depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
 
     nix eval --json \
-      --apply "a: with (a (builtins.fromJSON $argsJsonEscaped)); { out = config.system.build.toplevel; args = builtins.toJSON ({ nixpkgs = pkgs.path; deploy = config.deploy; system = config.system.build.toplevel.system; name = $nameEscaped; }); }" \
+      --apply "a: with (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))); { out = config.system.build.toplevel; args = builtins.toJSON ({ nixpkgs = pkgs.path; deploy = config.deploy; system = config.system.build.toplevel.system; name = $nameEscaped; }); }" \
       $NIX_TASK_FLAKE_PATH.dynamicNixOSSystems.$1
   '';
 
@@ -111,10 +124,13 @@ EOF
     name="$(echo $args | jq -r '.name')"
 
     argsJson="$(jq --null-input -cM --argjson args $args --arg out $system --arg remote $remote '{args:$args,out:$out,remote:$remote}')"
-    argsJsonEscaped="$(jq --null-input -cM --arg argsJson $argsJson '$argsJson')"
+    argsJsonEscaped="$(jq --null-input -cM --arg argsJson "$argsJson" '$argsJson')"
+
+    depsOut="$(taskGetDeps)"
+    depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
 
     deployScriptDrv="$(nix eval --impure --raw \
-      --apply "a: (a (builtins.fromJSON $argsJsonEscaped)).$name.drvPath" \
+      --apply "a: (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).$name.drvPath" \
       $NIX_TASK_FLAKE_PATH.dynamicDeployScript)"
 
     deployScriptOut="$(nix-store --realise $deployScriptDrv)"
