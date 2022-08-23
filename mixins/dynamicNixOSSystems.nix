@@ -126,11 +126,8 @@ EOF
     argsJson="$(jq --null-input -cM --argjson args $args --arg out $system --arg remote $remote '{args:$args,out:$out,remote:$remote}')"
     argsJsonEscaped="$(jq --null-input -cM --arg argsJson "$argsJson" '$argsJson')"
 
-    depsOut="$(taskGetDeps)"
-    depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
-
     deployScriptDrv="$(nix eval --impure --raw \
-      --apply "a: (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).$name.drvPath" \
+      --apply "a: (a (builtins.fromJSON $argsJsonEscaped)).$name.drvPath" \
       $NIX_TASK_FLAKE_PATH.dynamicDeployScript)"
 
     deployScriptOut="$(nix-store --realise $deployScriptDrv)"
