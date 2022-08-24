@@ -161,4 +161,36 @@ in
         };
       });
   };
+
+  writeAnsibleInventory = { deps, tasksWithHosts }:
+    let
+      tasksWithHostsById = listToAttrs (map (task: { name = task.id; value = task; }) tasksWithHosts);
+      hosts = flatten (map (task:
+        let
+          systems = tasksWithHostsById."${task.id}".getDynamicNixOSSystems (if hasAttr task.id deps then deps."${task.id}".output else {});
+        in
+        systems
+      ) tasksWithHosts);
+      ansibleInventory = {
+        all = {
+          hosts = listToAttrs (map (host:
+            let
+              remoteSplit = splitString "@" host.remote;
+              user = (elemAt remoteSplit 0);
+              remoteHost = (elemAt remoteSplit 1);
+            in
+            {
+              name = remoteHost;
+              value = {
+                ansible_user = user;
+              };
+            }) hosts);
+        };
+      };
+    in
+    ''
+      export ANSIBLE_INVENTORY=$TMPDIR/ansible-inventory.json
+
+      echo ${builtins.toJSON (builtins.toJSON (ansibleInventory))} > $ANSIBLE_INVENTORY
+    '';
 }

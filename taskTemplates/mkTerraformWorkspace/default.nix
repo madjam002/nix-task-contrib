@@ -13,7 +13,8 @@ with builtins;
   tfvars ? {},
   path ? [],
   terraform ? pkgs.terraform,
-  dynamicNixOSSystems ? {},
+  dynamicNixOSSystems ? null,
+  dynamicNixOSSystemVaultSSHRoles ? null,
 }:
 let
   terraformPkg = terraform.overrideAttrs (oldAttrs: rec {
@@ -83,7 +84,9 @@ let
         terraform apply -input=false -auto-approve
       fi
 
-      taskSetOutput "$(terraform output -json | ${pkgs.jq}/bin/jq 'with_entries(.value |= .value)')"
+      ${pkgs.nodejs}/bin/node ${./dynamicNixOSSystemsFromTerraform}/dumpDeployablesForOutput.js > $TMPDIR/deployables
+
+      taskSetOutput "$(terraform output -json | ${pkgs.jq}/bin/jq --argjson deployables "$(cat $TMPDIR/deployables)" '{"dynamicNixOSSystems":$deployables} * with_entries(.value |= .value)')"
     '';
 
   needsToBeLazy = isFunction backend || isFunction before || isFunction tfvars;
@@ -114,6 +117,11 @@ lib.mkTask {
     if needsToBeLazy then ({ deps }: getShellHook { inherit deps; }) else (getShellHook { deps = {}; });
 }
 // lib.mixins.dynamicNixOSSystems.output
-// {
+// (if dynamicNixOSSystems != null then {
   inherit dynamicNixOSSystems;
-}
+  getDynamicNixOSSystems = output: if hasAttr "dynamicNixOSSystems" output then output.dynamicNixOSSystems else [];
+  inherit dynamicNixOSSystemVaultSSHRoles;
+} else {})
+// (if dynamicNixOSSystems != null && dynamicNixOSSystemVaultSSHRoles != null then {
+  inherit dynamicNixOSSystemVaultSSHRoles;
+} else {})
