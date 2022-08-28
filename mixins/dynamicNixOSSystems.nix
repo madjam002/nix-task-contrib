@@ -16,6 +16,9 @@ let
     depsOut="$(taskGetDeps)"
     depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
 
+    ${lib.scripts.configureSSHHost} "$remote" \
+      StrictHostKeyChecking=no
+
     case "$mode" in
       "boot")
         echo "Deploying system for activation on next boot"
@@ -131,6 +134,9 @@ EOF
       $NIX_TASK_FLAKE_PATH.dynamicDeployScript)"
 
     deployScriptOut="$(nix-store --realise $deployScriptDrv)"
+
+    ${lib.scripts.configureSSHHost} "$remote" \
+      StrictHostKeyChecking=no
 
     $deployScriptOut
   '';

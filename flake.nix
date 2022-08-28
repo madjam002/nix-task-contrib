@@ -13,8 +13,11 @@
 
         outputsBuilder = channels:
           let
-            libFn = { pkgs }:
+            packagesFn = { pkgs }: {
+            };
+            libFn = args@{ pkgs }:
               let
+                pkgs = args.pkgs // (packagesFn { pkgs = args.pkgs; });
                 lib = pkgs.lib // nix-task.lib // {
                   nixus = pkgs.callPackage ./packages/nixus {};
                   includes = {
@@ -29,6 +32,9 @@
                   taskTemplates = {
                     mkTerraformWorkspace = import ./taskTemplates/mkTerraformWorkspace { inherit pkgs; inherit lib; };
                   };
+                  scripts = {
+                    configureSSHHost = "${pkgs.nodePackages.zx}/bin/zx ${./scripts/configureSSHHost.mjs}";
+                  };
                 };
               in
               lib;
@@ -39,6 +45,7 @@
               inherit mixins;
               inherit taskTemplates;
             };
+            packages = packagesFn;
           };
       };
     in
