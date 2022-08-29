@@ -32,7 +32,7 @@ for (let i = 0; i < lines.length; i++) {
 
     const nextIndex = lines.slice(i + 1).findIndex(line => line.trim().toLowerCase().startsWith('host '))
     if (nextIndex >= 0) {
-      i = nextIndex
+      i = nextIndex + i
     } else {
       i = lines.length
     }

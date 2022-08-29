@@ -3,7 +3,9 @@ const { execSync } = require('child_process')
 const TWENTY_MB = 20 * 1024 * 1024
 
 module.exports = function getDeployablesInTfState() {
-  const tfState = JSON.parse(execSync('terraform state pull', { maxBuffer: TWENTY_MB }).toString())
+  const tfState = JSON.parse(
+    execSync('terraform state pull', { maxBuffer: TWENTY_MB }).toString()
+  )
 
   const dataSources = tfState.resources.filter(
     (resource) => resource.mode === 'data'
@@ -14,7 +16,8 @@ module.exports = function getDeployablesInTfState() {
       if (dataSource.type === 'external') {
         for (const instance of dataSource.instances) {
           if (
-            instance?.attributes?.program?.[0] === 'tfQueryDynamicNixOSSystem' &&
+            instance?.attributes?.program?.[0] ===
+              'tfQueryDynamicNixOSSystem' &&
             instance?.attributes?.result?.out ===
               resourceInstance?.attributes?.triggers?.system
           ) {
@@ -47,7 +50,9 @@ module.exports = function getDeployablesInTfState() {
             args: systemDataSource.args,
             remote: instance?.attributes?.triggers?.remote,
             tfKey: [
-              resource.name,
+              [resource.module, resource.name]
+                .filter((part) => !!part)
+                .join('.'),
               instance.index_key != null ? `[${instance.index_key}]` : null,
             ]
               .filter((part) => !!part)
