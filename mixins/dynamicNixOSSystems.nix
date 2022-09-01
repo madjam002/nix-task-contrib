@@ -17,7 +17,7 @@ let
     depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
 
     ${lib.scripts.configureSSHHost} "$remote" \
-      StrictHostKeyChecking=no
+      StrictHostKeyChecking=no UserKnownHostsFile=$(mktemp)
 
     case "$mode" in
       "boot")
@@ -107,7 +107,7 @@ EOF
     depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
 
     nix eval --json \
-      --apply "a: with (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))); { out = config.system.build.toplevel; args = builtins.toJSON ({ nixpkgs = pkgs.path; deploy = config.deploy; system = config.system.build.toplevel.system; name = $nameEscaped; }); }" \
+      --apply "let inArgs = { deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped); in a: with (a (inArgs)); { out = config.system.build.toplevel; args = builtins.toJSON ({ nixpkgs = pkgs.path; deploy = config.deploy; system = config.system.build.toplevel.system; name = $nameEscaped; systemArgs = inArgs; }); }" \
       $NIX_TASK_FLAKE_PATH.dynamicNixOSSystems.$1
   '';
 
@@ -126,7 +126,7 @@ EOF
 
     name="$(echo $args | jq -r '.name')"
 
-    argsJson="$(jq --null-input -cM --argjson args $args --arg out $system --arg remote $remote '{args:$args,out:$out,remote:$remote}')"
+    argsJson="$(jq --null-input -cM --argjson args "$args" --arg out "$system" --arg remote "$remote" '{args:$args,out:$out,remote:$remote}')"
     argsJsonEscaped="$(jq --null-input -cM --arg argsJson "$argsJson" '$argsJson')"
 
     deployScriptDrv="$(nix eval --impure --raw \
@@ -136,9 +136,35 @@ EOF
     deployScriptOut="$(nix-store --realise $deployScriptDrv)"
 
     ${lib.scripts.configureSSHHost} "$remote" \
-      StrictHostKeyChecking=no
+      StrictHostKeyChecking=no UserKnownHostsFile=$(mktemp)
 
     $deployScriptOut
+  '';
+
+  tfBuildDiskImageForDynamicNixOSSystem = pkgs.writeShellScriptBin "tfBuildDiskImageForDynamicNixOSSystem" ''
+    set -e
+    export PATH=$PATH:${pkgs.nix}/bin:${pkgs.git}/bin:${pkgs.jq}/bin:${pkgs.openssh}/bin
+
+    system="$1"
+    args="$args"
+
+    name="$(echo $args | jq -r '.name')"
+
+    argsJson="$(jq --null-input -cM --argjson args "$args" --arg out "$system" '{args:$args,out:$out}')"
+    argsJsonEscaped="$(jq --null-input -cM --arg argsJson "$argsJson" '$argsJson')"
+
+    diskImage="$(nix eval --impure --json \
+      --apply "flake: let args = (builtins.fromJSON $argsJsonEscaped).args; out = (flake.dynamicSystemDiskImage (flake.dynamicNixOSSystems.\''${args.name} args.systemArgs)); in { drvPath = out.image.drvPath; filename = out.filename; }" \
+      $NIX_TASK_FLAKE_PATH)"
+
+    diskImageDrv="$(echo $diskImage | jq -r '.drvPath')"
+    filename="$(echo $diskImage | jq -r '.filename')"
+
+    nix-store --realise $diskImageDrv > /dev/null
+
+    diskImagePath="$(nix-store --query $diskImageDrv)/$filename"
+
+    jq --null-input -cM --arg path "$diskImagePath" '{path:$path}'
   '';
 in
 {
@@ -149,6 +175,7 @@ in
       cp ${deployDynamicNixOSSystem}/bin/* $out/bin/
       cp ${tfQueryDynamicNixOSSystem}/bin/* $out/bin/
       cp ${tfDeployDynamicNixOSSystem}/bin/* $out/bin/
+      cp ${tfBuildDiskImageForDynamicNixOSSystem}/bin/* $out/bin/
     '';
 
   output = {
@@ -161,11 +188,36 @@ in
               _pkgs = if (hasAttr "pkgs" args) then args.pkgs else (import args.nixpkgs {});
               system.build.toplevel = out;
             };
-          } // args.deploy // {
+          } // (filterAttrs (k: v: k != "diskOptions") args.deploy) // {
             host = remote;
           }));
         };
       });
+
+    dynamicSystemDiskImage = system:
+      let
+        diskImageOptions = {
+          pkgs = system.pkgs;
+          lib = system.pkgs.lib;
+          config = system.config;
+
+          format = "qcow2";
+          diskSize = 16 * 1024;
+          partitionTableType = "efi";
+          fsType = "ext4";
+        } // (if hasAttr "diskOptions" system.config.deploy then system.config.deploy.diskOptions else {});
+
+        filename = "nixos." + {
+          qcow2 = "qcow2";
+          vdi   = "vdi";
+          vpc   = "vhd";
+          raw   = "img";
+        }.${diskImageOptions.format} or diskImageOptions.format;
+      in
+      {
+        image = (import "${pkgs.path}/nixos/lib/make-disk-image.nix") (diskImageOptions);
+        inherit filename;
+      };
   };
 
   writeAnsibleInventory = { deps, tasksWithHosts }:
