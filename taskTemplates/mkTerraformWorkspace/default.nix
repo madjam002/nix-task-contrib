@@ -15,6 +15,8 @@ with (import ./util.nix { inherit pkgs; });
   path ? [],
   terraform ? pkgs.terraform,
   modules ? null,
+  modulesPath ? null,
+  beforeApply ? null,
   dynamicNixOSSystems ? null,
   dynamicNixOSSystemVaultSSHRoles ? null,
 }:
@@ -57,15 +59,24 @@ let
 
       export TF_CLI_ARGS_plan="-var-file ${variablesFile}"
       export TF_CLI_ARGS_apply="-var-file ${variablesFile}"
+      export TF_CLI_ARGS_destroy="-var-file ${variablesFile}"
       export TF_CLI_ARGS_import="-var-file ${variablesFile}"
       export TF_CLI_ARGS_init="-backend-config=$TMPDIR/backendConfig.json"
       export TF_DATA_DIR="$TMPDIR/.terraform"
       export NIX_TERRAFORM_LOCKFILE_PATH="$TMPDIR/.terraform.lock.hcl"
 
-      ${if modules != null then ''
+      ${if modules != null || modulesPath != null then ''
       export NIX_TERRAFORM_EXTRA_SRC_DIR="$TMPDIR/generatedTf"
       mkdir -p $NIX_TERRAFORM_EXTRA_SRC_DIR
-      cat ${generatedModulesTfFile { inherit deps; }} > $NIX_TERRAFORM_EXTRA_SRC_DIR/_generated.tf
+      mkdir -p $TMPDIR/tfModules
+      mkdir -p /root/tfModules
+      ${if modules != null then "cat ${generatedModulesTfFile { inherit deps; }} > $NIX_TERRAFORM_EXTRA_SRC_DIR/_generated.tf" else ""}
+
+      ${if modulesPath != null then (
+        concatStringsSep "\n" (mapAttrsToList (name: value: "ln -s ${value} $TMPDIR/tfModules/${name}") modulesPath)
+      ) else ""}
+
+      ${pkgs.util-linux}/bin/mount --bind $TMPDIR/tfModules /root/tfModules
 
       mkdir -p $TMPDIR/tempTfOverlay
       export TF_OVERLAY_WORK=$TMPDIR/tfoverlaywork
@@ -77,7 +88,8 @@ let
       cd $PWD
       '' else ""}
 
-      terraform init
+      set +e
+      terraform init || true
     '';
 
   getInitScript = { deps }:
@@ -95,6 +107,8 @@ let
   getInitApplyScript = { deps }:
     ''
       ${getInitScript { inherit deps; }}
+
+      ${if beforeApply != null then (if isFunction beforeApply then (beforeApply { inherit deps; }) else beforeApply) else ""}
 
       # apply with input=false if terminal is not interactive
       if [ -t 0 ] ; then
