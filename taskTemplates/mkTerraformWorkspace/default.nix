@@ -134,7 +134,7 @@ let
     ${pkgs.nodejs}/bin/node ${./dynamicNixOSSystemsFromTerraform}/deploySystem.js "$1" "$2"
   '';
 in
-lib.mkTask {
+mkTask {
   inherit stableId;
   inherit deps;
   inherit getOutput;

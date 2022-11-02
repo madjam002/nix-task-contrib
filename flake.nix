@@ -1,5 +1,5 @@
 {
-  description = "Sample tasks and actions for Nix Task";
+  description = "Sample standard library of tasks and actions for nix-task";
 
   inputs = {
     utils.url = github:gytis-ivaskevicius/flake-utils-plus;
@@ -30,6 +30,7 @@
                     dynamicNixOSSystems = import ./mixins/dynamicNixOSSystems.nix { inherit pkgs; inherit lib; };
                   };
                   taskTemplates = {
+                    mkKubernetesManifestDeployment = import ./taskTemplates/mkKubernetesManifestDeployment { inherit pkgs; inherit lib; };
                     mkTerraformWorkspace = import ./taskTemplates/mkTerraformWorkspace { inherit pkgs; inherit lib; };
                   };
                   scripts = {
