@@ -14,6 +14,7 @@
         outputsBuilder = channels:
           let
             packagesFn = { pkgs }: {
+              terraformVaultHttpBackend = pkgs.callPackage ./packages/terraform-vault-http-backend {};
             };
             libFn = args@{ pkgs }:
               let

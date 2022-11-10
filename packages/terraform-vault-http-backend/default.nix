@@ -1,6 +1,10 @@
 { stdenv, nodejs, yarn, lib }:
 
 let
+  outputHashByPlatform = {
+    "x86_64-linux" = "sha256-9jf3TfIVtJzR1YGMgJ+AHrTW/kro4nAcR+pnHYKDQW4=";
+    "aarch64-darwin" = "sha256-2j13HGmVxOLSG6bty3GWBGy3xsIfLwYzZeMFy1GsBa0=";
+  };
   copySrc = src: builtins.concatStringsSep "" (lib.mapAttrsToList (fileName: srcItem: ''
     if [[ -d "${srcItem}" ]]; then
       mkdir -p ${fileName} && cp --no-preserve=mode -r ${srcItem}/* ${fileName}
@@ -22,7 +26,7 @@ stdenv.mkDerivation {
 
   outputHashMode = "recursive";
   outputHashAlgo = "sha256";
-  outputHash = "sha256-9jf3TfIVtJzR1YGMgJ+AHrTW/kro4nAcR+pnHYKDQW4=";
+  outputHash = outputHashByPlatform.${stdenv.system};
 
   build = ''
     mkdir -p $out
