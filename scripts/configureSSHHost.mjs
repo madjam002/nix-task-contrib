@@ -6,7 +6,7 @@ try {
   sshConfig = fs.readFileSync(process.env.HOME + '/.ssh/config', 'utf8')
 } catch (ex) {}
 
-const [__, remote, ...opts] = argv._
+const [remote, ...opts] = argv._
 
 const [user, host] = remote.split('@')
 
