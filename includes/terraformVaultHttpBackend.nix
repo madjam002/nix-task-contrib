@@ -1,12 +1,17 @@
-{ pkgs, lib, ... }:
+{ pkgs, lib, yarnpnp2nix, ... }:
 
 let
-  terraformVaultHttpBackend = pkgs.callPackage ../packages/terraform-vault-http-backend {};
+  mkYarnPackagesFromManifest = yarnpnp2nix.lib."${pkgs.stdenv.system}".mkYarnPackagesFromManifest;
+
+  yarnPackages = mkYarnPackagesFromManifest {
+    inherit pkgs;
+    yarnManifest = import ../packages/terraform-vault-http-backend/yarn-manifest.nix;
+  };
+
+  terraformVaultHttpBackend = yarnPackages."terraform-vault-http-backend@workspace:.";
 
   vaultHttpBackendBackgroundScript = ''
     PORT_FILE="$TMPDIR/.http-backend-port"
-
-    pushd ${terraformVaultHttpBackend} > /dev/null
 
     if [ -f "$PORT_FILE" ]; then
       export BACKEND_PORT="$(cat $PORT_FILE)"
@@ -19,7 +24,7 @@ let
     taskRunInBackground NODE_EXTRA_CA_CERTS="$SSL_CERT_FILE" \
       PORT_FILE="$PORT_FILE" \
       PORT="$BACKEND_PORT" \
-      ${pkgs.nodejs}/bin/node .
+      ${terraformVaultHttpBackend}/bin/terraform-vault-http-backend
 
     # wait for server to start
     while [ ! -f "$PORT_FILE" ]
@@ -34,8 +39,6 @@ let
     done
 
     export BACKEND_BASE_URL="http://localhost:$BACKEND_PORT"
-
-    popd > /dev/null
   '';
 in
 vaultHttpBackendBackgroundScript

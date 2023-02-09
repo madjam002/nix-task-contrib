@@ -2,11 +2,13 @@
   description = "Sample standard library of tasks and actions for nix-task";
 
   inputs = {
-    utils.url = github:gytis-ivaskevicius/flake-utils-plus;
-    nix-task.url = github:madjam002/nix-task;
+    utils.url = "github:gytis-ivaskevicius/flake-utils-plus";
+    nix-task.url = "github:madjam002/nix-task";
+    yarnpnp2nix.url = "github:madjam002/yarnpnp2nix";
+    yarnpnp2nix.inputs.utils.follows = "utils";
   };
 
-  outputs = inputs@{ self, utils, nix-task, ... }:
+  outputs = inputs@{ self, utils, nix-task, yarnpnp2nix, ... }:
     let
       flake = utils.lib.mkFlake {
         inherit self inputs;
@@ -25,7 +27,7 @@
                     authenticateWithVault = import ./includes/authenticateWithVault.nix { inherit pkgs; inherit lib; };
                     registerCACertificates = import ./includes/registerCACertificates.nix { inherit pkgs; inherit lib; };
                     sshAgentWithVaultSSHRoles = import ./includes/sshAgentWithVaultSSHRoles.nix { inherit pkgs; inherit lib; };
-                    terraformVaultHttpBackend = import ./includes/terraformVaultHttpBackend.nix { inherit pkgs; inherit lib; };
+                    terraformVaultHttpBackend = import ./includes/terraformVaultHttpBackend.nix { inherit pkgs; inherit lib; inherit yarnpnp2nix; };
                   };
                   mixins = {
                     dynamicNixOSSystems = import ./mixins/dynamicNixOSSystems.nix { inherit pkgs; inherit lib; };
