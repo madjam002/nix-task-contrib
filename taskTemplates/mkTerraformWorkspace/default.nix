@@ -17,6 +17,7 @@ with (import ./util.nix { inherit pkgs; });
   modules ? null,
   modulesPath ? null,
   beforeApply ? null,
+  planArgs ? null,
   dynamicNixOSSystems ? null,
   dynamicNixOSSystemVaultSSHRoles ? null,
 }:
@@ -104,6 +105,8 @@ let
       ${pkgs.nodejs}/bin/node ${./dynamicNixOSSystemsFromTerraform}/showDeployables.js
     '';
 
+  getPlanArgs = { deps }: if planArgs != null then (if isFunction planArgs then (planArgs { inherit deps; }) else planArgs) else "";
+
   getInitApplyScript = { deps }:
     ''
       ${getInitScript { inherit deps; }}
@@ -113,15 +116,15 @@ let
       if taskRunShouldApply; then
         # apply with input=false if terminal is not interactive
         if [ -t 0 ] ; then
-          terraform apply
+          terraform apply ${getPlanArgs { inherit deps; }}
         else
           echo "Non-interactive terminal, will apply any changes immediately"
-          terraform apply -input=false -auto-approve
+          terraform apply -input=false -auto-approve ${getPlanArgs { inherit deps; }}
         fi
       else
         # if dry run, then only do a terraform plan
         echo "Only running terraform plan as nix-task is in dry-run mode"
-        terraform plan
+        terraform plan ${getPlanArgs { inherit deps; }}
       fi
 
       ${pkgs.nodejs}/bin/node ${./dynamicNixOSSystemsFromTerraform}/dumpDeployablesForOutput.js > $TMPDIR/deployables
