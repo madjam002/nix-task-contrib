@@ -110,12 +110,18 @@ let
 
       ${if beforeApply != null then (if isFunction beforeApply then (beforeApply { inherit deps; }) else beforeApply) else ""}
 
-      # apply with input=false if terminal is not interactive
-      if [ -t 0 ] ; then
-        terraform apply
+      if taskRunShouldApply; then
+        # apply with input=false if terminal is not interactive
+        if [ -t 0 ] ; then
+          terraform apply
+        else
+          echo "Non-interactive terminal, will apply any changes immediately"
+          terraform apply -input=false -auto-approve
+        fi
       else
-        echo "Non-interactive terminal, will apply any changes immediately"
-        terraform apply -input=false -auto-approve
+        # if dry run, then only do a terraform plan
+        echo "Only running terraform plan as nix-task is in dry-run mode"
+        terraform plan
       fi
 
       ${pkgs.nodejs}/bin/node ${./dynamicNixOSSystemsFromTerraform}/dumpDeployablesForOutput.js > $TMPDIR/deployables

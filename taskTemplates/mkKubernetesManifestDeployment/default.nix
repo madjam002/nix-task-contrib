@@ -14,6 +14,10 @@ with builtins;
     MANIFEST=`renderManifest default`
     echo "$MANIFEST" | kubectl apply $kubectlArgs --wait -f -
   '',
+  dryRunScript ? { deps }: ''
+    MANIFEST=`renderManifest default`
+    echo "$MANIFEST" | kubectl apply $kubectlArgs --dry-run=server --wait -f -
+  '',
   path ? [],
 }:
 let
@@ -52,7 +56,13 @@ let
   getRunScript = { deps }:
     ''
       ${initScript { inherit deps; }}
-      ${applyScript { inherit deps; }}
+
+      if taskRunShouldApply; then
+        ${applyScript { inherit deps; }}
+      else
+        echo "Running dry-run script as nix-task is in dry-run mode"
+        ${dryRunScript { inherit deps; }}
+      fi
     '';
 in
 mkTask {
