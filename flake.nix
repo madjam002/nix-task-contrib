@@ -45,6 +45,7 @@
           in
           {
             lib = { pkgs }: with (libFn { inherit pkgs; }); {
+              inherit nixus;
               inherit includes;
               inherit mixins;
               inherit taskTemplates;

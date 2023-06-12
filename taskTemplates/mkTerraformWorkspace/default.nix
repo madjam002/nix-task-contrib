@@ -20,6 +20,7 @@ with (import ./util.nix { inherit pkgs; });
   planArgs ? null,
   dynamicNixOSSystems ? null,
   dynamicNixOSSystemVaultSSHRoles ? null,
+  impureEnvPassthrough ? null,
 }:
 let
   terraformPkg = terraform.overrideAttrs (oldAttrs: rec {
@@ -147,6 +148,7 @@ mkTask {
   inherit stableId;
   inherit deps;
   inherit getOutput;
+  inherit impureEnvPassthrough;
   dir = src;
   path = with pkgs; [
     nix
