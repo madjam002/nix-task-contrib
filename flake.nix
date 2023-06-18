@@ -49,6 +49,7 @@
               inherit includes;
               inherit mixins;
               inherit taskTemplates;
+              inherit scripts;
             };
             packages = packagesFn;
           };
