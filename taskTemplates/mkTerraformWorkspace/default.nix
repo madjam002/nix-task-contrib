@@ -16,6 +16,7 @@ with (import ./util.nix { inherit pkgs; });
   terraform ? pkgs.terraform,
   modules ? null,
   modulesPath ? null,
+  afterInit ? null,
   beforeApply ? null,
   planArgs ? null,
   dynamicNixOSSystems ? null,
@@ -92,6 +93,8 @@ let
 
       set +e
       terraform init || true
+
+      ${if afterInit != null then (if isFunction afterInit then (afterInit { inherit deps; }) else afterInit) else ""}
     '';
 
   getInitScript = { deps }:

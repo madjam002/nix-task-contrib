@@ -117,6 +117,7 @@ EOF
 
     remote="$1"
     system="$2"
+    mode="$3"
     args="$args"
 
     systemDrv="$(nix show-derivation $system | jq -r 'keys[0]')"
@@ -129,16 +130,35 @@ EOF
     argsJson="$(jq --null-input -cM --argjson args "$args" --arg out "$system" --arg remote "$remote" '{args:$args,out:$out,remote:$remote}')"
     argsJsonEscaped="$(jq --null-input -cM --arg argsJson "$argsJson" '$argsJson')"
 
-    deployScriptDrv="$(nix eval --impure --raw \
-      --apply "a: (a (builtins.fromJSON $argsJsonEscaped)).$name.drvPath" \
-      $NIX_TASK_FLAKE_PATH.dynamicDeployScript)"
+    case "$mode" in
+      "boot")
+        echo "Deploying system for activation on next boot"
 
-    deployScriptOut="$(nix-store --realise $deployScriptDrv)"
+        systemOut="$(nix-store --realise $systemDrv)"
 
-    ${lib.scripts.configureSSHHost} "$remote" \
-      StrictHostKeyChecking=no UserKnownHostsFile=$(mktemp)
+        nix-copy-closure --to $remote \
+          $systemOut
 
-    $deployScriptOut
+        ssh -o BatchMode=yes "$remote" \
+          "sudo nix-env -p /nix/var/nix/profiles/system --set $systemOut && sudo $systemOut/bin/switch-to-configuration boot"
+
+        echo "Success"
+        ;;
+      *)
+        echo "Deploying system using Nixus, will rollback if there are any issues"
+
+        deployScriptDrv="$(nix eval --impure --raw \
+          --apply "a: (a (builtins.fromJSON $argsJsonEscaped)).$name.drvPath" \
+          $NIX_TASK_FLAKE_PATH.dynamicDeployScript)"
+
+        deployScriptOut="$(nix-store --realise $deployScriptDrv)"
+
+        ${lib.scripts.configureSSHHost} "$remote" \
+          StrictHostKeyChecking=no UserKnownHostsFile=$(mktemp)
+
+        $deployScriptOut
+        ;;
+    esac
   '';
 
   tfBuildDiskImageForDynamicNixOSSystem = pkgs.writeShellScriptBin "tfBuildDiskImageForDynamicNixOSSystem" ''
