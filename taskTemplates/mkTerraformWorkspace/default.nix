@@ -156,6 +156,21 @@ mkTask {
     envsubst
     lib.mixins.dynamicNixOSSystems.commands
     deployNixOSSystem
+
+    # include vault, nix-task-contrib is opinionated in that vault is used for a lot of tasks, so include it here to make life easier
+    vault
+
+    # include baseline of tools that are used by a lot of terraform scripts
+    bash
+    coreutils
+    jq
+    procps
+    openssh
+    gawk
+    curl
+    wget
+    unzip
+    libxslt
   ] ++ path;
   run =
     if needsToBeLazy then ({ deps }: getInitApplyScript { inherit deps; }) else (getInitApplyScript { deps = {}; });

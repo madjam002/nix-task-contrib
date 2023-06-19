@@ -24,7 +24,7 @@
                 lib = pkgs.lib // nix-task.lib // {
                   nixus = pkgs.callPackage ./packages/nixus {};
                   includes = {
-                    authenticateWithVault = import ./includes/authenticateWithVault.nix { inherit pkgs; inherit lib; };
+                    authenticateWithVault = import ./includes/authenticateWithVault { inherit pkgs; inherit lib; };
                     registerCACertificates = import ./includes/registerCACertificates.nix { inherit pkgs; inherit lib; };
                     sshAgentWithVaultSSHRoles = import ./includes/sshAgentWithVaultSSHRoles.nix { inherit pkgs; inherit lib; };
                     terraformVaultHttpBackend = import ./includes/terraformVaultHttpBackend.nix { inherit pkgs; inherit lib; inherit yarnpnp2nix; };

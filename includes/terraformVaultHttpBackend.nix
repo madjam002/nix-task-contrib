@@ -24,6 +24,7 @@ let
     taskRunInBackground NODE_EXTRA_CA_CERTS="$SSL_CERT_FILE" \
       PORT_FILE="$PORT_FILE" \
       PORT="$BACKEND_PORT" \
+      VAULT_TOKEN="$(${pkgs.vault}/bin/vault token lookup -format=json | ${pkgs.jq}/bin/jq -r '.data.id')" \
       ${terraformVaultHttpBackend}/bin/terraform-vault-http-backend
 
     # wait for server to start
