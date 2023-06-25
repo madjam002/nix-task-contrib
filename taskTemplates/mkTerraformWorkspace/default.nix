@@ -91,7 +91,6 @@ let
       cd $PWD
       '' else ""}
 
-      set +e
       terraform init || true
 
       ${if afterInit != null then (if isFunction afterInit then (afterInit { inherit deps; }) else afterInit) else ""}
