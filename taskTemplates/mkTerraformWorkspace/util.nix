@@ -28,9 +28,9 @@ let
               ${if hasAttr "dependsOn" conf then "depends_on = [${concatStringsSep "," conf.dependsOn}]" else ""}
               ${if hasAttr "config" conf then conf.config else ""}
 
-            ${concatStringsSep "\n" (
+            ${if (conf.variables or null) != null then (concatStringsSep "\n" (
               pkgs.lib.mapAttrsToList (name: val: "  ${name} = ${formatTfValue val}") conf.variables
-            )}
+            )) else ""}
             }
           '') modules
         )

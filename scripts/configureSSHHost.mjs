@@ -30,11 +30,19 @@ for (let i = 0; i < lines.length; i++) {
     out += '\n'
     didUpdate = true
 
+    const from = i
+
     const nextIndex = lines.slice(i + 1).findIndex(line => line.trim().toLowerCase().startsWith('host '))
     if (nextIndex >= 0) {
       i = nextIndex + i
     } else {
       i = lines.length
+    }
+
+    for (const existingLine of lines.slice(from + 1, i)) {
+      if (!opts.some(opt => existingLine.trim().startsWith(opt.split('=')[0]))) {
+        out += existingLine
+      }
     }
   } else {
     out += line + '\n'
@@ -49,4 +57,4 @@ if (!didUpdate) {
 }
 
 fs.ensureDirSync(process.env.HOME + '/.ssh')
-fs.writeFileSync(process.env.HOME + '/.ssh/config', out, 'utf8')
+fs.writeFileSync(process.env.HOME + '/.ssh/config', out.trim(), 'utf8')

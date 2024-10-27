@@ -16,7 +16,7 @@ nixusArgs: conf: let
         lib = extendLib super.lib;
       })
     ];
-    system = nixusArgs.deploySystem or builtins.currentSystem;
+    system = nixusArgs.deploySystem;
   };
 
   result = nixusPkgs.lib.evalModules {
@@ -33,6 +33,7 @@ nixusArgs: conf: let
       {
         _module.args.nixus = {
           pkgs = nixusPkgs;
+          hostPkgs = nixusArgs.hostPkgs;
           inherit extendLib;
         };
         _module.args.pkgs = throw "You're trying to access the pkgs argument from a Nixus module, use the nixus argument instead and use nixus.pkgs from that.";

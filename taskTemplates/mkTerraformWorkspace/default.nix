@@ -15,7 +15,8 @@ with (import ./util.nix { inherit pkgs; });
   path ? [],
   terraform ? pkgs.terraform,
   modules ? null,
-  modulesPath ? null,
+  modulesPath ? null, # @deprecated, use linkModules instead as it works on both Linux and macOS
+  linkModules ? null,
   afterInit ? null,
   beforeApply ? null,
   planArgs ? null,
@@ -44,13 +45,18 @@ let
   beforeScripts = { deps }:
     builtins.concatStringsSep "\n" (if isFunction before then (before { inherit deps; }) else before);
 
-  generatedModulesTfFile = { deps }: if modules != null then generateModulesFile (modules { inherit deps; }) else null;
+  generatedModulesTfFile = { deps }:
+    if modules != null then generateModulesFile (if isFunction modules then (modules { inherit deps; }) else modules) else null;
 
-  getSetupScript = { deps }:
+  getSetupScript = { deps, isShellHook ? false }:
     let
       backendConfigFile = getBackendConfigFile { inherit deps; };
       variablesFile = getVariablesFile { inherit deps; };
     in
+    /* when in shellHook mode, we work from the current working directory, so changes to .tf files are reflected without rerunning nix-task shell.
+      If modules are passed in, then the _generated.tf will be placed in the current working directory, so will need to be git ignored.
+
+      Outside of shellHook mode, the .tf files are copied to a temporary directory, and terraform commands are run from there. */
     ''
       ${beforeScripts { inherit deps; }}
 
@@ -68,27 +74,37 @@ let
       export TF_DATA_DIR="$TMPDIR/.terraform"
       export NIX_TERRAFORM_LOCKFILE_PATH="$TMPDIR/.terraform.lock.hcl"
 
-      ${if modules != null || modulesPath != null then ''
-      export NIX_TERRAFORM_EXTRA_SRC_DIR="$TMPDIR/generatedTf"
-      mkdir -p $NIX_TERRAFORM_EXTRA_SRC_DIR
+      ${if isShellHook == true then
+        ''
+
+        ''
+      else
+        ''
+        export NIX_TERRAFORM_WORKDIR="$TMPDIR/tf"
+        mkdir -p $NIX_TERRAFORM_WORKDIR
+        ln -s $PWD/* $NIX_TERRAFORM_WORKDIR/
+
+        cd $NIX_TERRAFORM_WORKDIR
+        ''}
+
+      ${if modules != null then "cat ${generatedModulesTfFile { inherit deps; }} > $PWD/_generated.tf" else ""}
+
+      ${if linkModules != null then
+        ''
+        rm -rf $PWD/_nixTfModules || true
+        mkdir -p $PWD/_nixTfModules
+        ${concatStringsSep "\n" (mapAttrsToList (name: value: "ln -s ${value} $PWD/_nixTfModules/${name}") linkModules)}
+        ''
+      else ""}
+
+      ${if modulesPath != null then
+      # modulesPath requires nix-task experimental.taskUserNamespaces and Linux
+      ''
       mkdir -p $TMPDIR/tfModules
+      ${concatStringsSep "\n" (mapAttrsToList (name: value: "ln -s ${value} $TMPDIR/tfModules/${name}") modulesPath)}
+
       mkdir -p /root/tfModules
-      ${if modules != null then "cat ${generatedModulesTfFile { inherit deps; }} > $NIX_TERRAFORM_EXTRA_SRC_DIR/_generated.tf" else ""}
-
-      ${if modulesPath != null then (
-        concatStringsSep "\n" (mapAttrsToList (name: value: "ln -s ${value} $TMPDIR/tfModules/${name}") modulesPath)
-      ) else ""}
-
       ${pkgs.util-linux}/bin/mount --bind $TMPDIR/tfModules /root/tfModules
-
-      mkdir -p $TMPDIR/tempTfOverlay
-      export TF_OVERLAY_WORK=$TMPDIR/tfoverlaywork
-      mkdir -p $TF_OVERLAY_WORK/work
-      chmod 0600 $TF_OVERLAY_WORK/work
-
-      ${pkgs.util-linux}/bin/mount -t overlay overlay \
-        -o lowerdir=$NIX_TERRAFORM_EXTRA_SRC_DIR:$PWD,upperdir=$TMPDIR/tempTfOverlay,workdir=$TF_OVERLAY_WORK $PWD
-      cd $PWD
       '' else ""}
 
       terraform init || true
@@ -103,7 +119,7 @@ let
 
   getShellHook = { deps }:
     ''
-      ${getSetupScript { inherit deps; }}
+      ${getSetupScript { inherit deps; isShellHook = true; }}
 
       ${pkgs.nodejs}/bin/node ${./dynamicNixOSSystemsFromTerraform}/showDeployables.js
     '';

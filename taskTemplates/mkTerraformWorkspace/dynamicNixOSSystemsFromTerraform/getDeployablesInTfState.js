@@ -3,9 +3,15 @@ const { execSync } = require('child_process')
 const TWENTY_MB = 20 * 1024 * 1024
 
 module.exports = function getDeployablesInTfState() {
-  const tfState = JSON.parse(
-    execSync('terraform state pull', { maxBuffer: TWENTY_MB }).toString()
-  )
+  let tfState
+  try {
+    tfState = JSON.parse(
+      execSync('terraform state pull', { maxBuffer: TWENTY_MB }).toString()
+    )
+  } catch (ex) {
+    // terraform probably hasn't been initialised yet, so just return empty array
+    return []
+  }
 
   const dataSources = tfState.resources.filter(
     (resource) => resource.mode === 'data'

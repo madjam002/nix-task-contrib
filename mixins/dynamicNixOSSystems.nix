@@ -16,23 +16,23 @@ let
     depsOut="$(taskGetDeps)"
     depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
 
-    ${lib.scripts.configureSSHHost} "$remote" \
+    ${lib.scripts.configureSSHHost}/bin/configureSSHHost "$remote" \
       StrictHostKeyChecking=no UserKnownHostsFile=$(mktemp)
+
+    export NIX_SSHOPTS="-F $HOME/.ssh/config"
 
     case "$mode" in
       "boot")
         echo "Deploying system for activation on next boot"
 
-        systemDrv="$(nix eval --raw \
-          --apply "a: (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath" \
-          $NIX_TASK_FLAKE_PATH.dynamicNixOSSystems.$1)"
+        systemDrv="$(taskEval "task: (task.dynamicNixOSSystems.$1 ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath")"
 
         systemOut="$(nix-store --realise $systemDrv)"
 
-        nix-copy-closure --to $remote \
+        nix-copy-closure -s --to $remote \
           $systemOut
 
-        ssh -o BatchMode=yes "$remote" \
+        ssh -F $HOME/.ssh/config -o BatchMode=yes "$remote" \
           "sudo nix-env -p /nix/var/nix/profiles/system --set $systemOut && sudo $systemOut/bin/switch-to-configuration boot"
 
         echo "Success"
@@ -41,24 +41,20 @@ let
         echo "Deploying system immediately using switch-to-configuration, this may break connectivity with the host"
         echo "Ctrl+C now if you would like to cancel this operation"
 
-        systemDrv="$(nix eval --raw \
-          --apply "a: (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath" \
-          $NIX_TASK_FLAKE_PATH.dynamicNixOSSystems.$1)"
+        systemDrv="$(taskEval "task: (task.dynamicNixOSSystems.$1 ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath")"
 
         systemOut="$(nix-store --realise $systemDrv)"
 
-        nix-copy-closure --to $remote \
+        nix-copy-closure -s --to $remote \
           $systemOut
 
-        ssh -o BatchMode=yes "$remote" \
+        ssh -F $HOME/.ssh/config -o BatchMode=yes "$remote" \
           "sudo nix-env -p /nix/var/nix/profiles/system --set $systemOut && sudo $systemOut/bin/switch-to-configuration switch"
 
         echo "Success"
         ;;
       "build")
-        systemDrv="$(nix eval --raw \
-          --apply "a: (a ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath" \
-          $NIX_TASK_FLAKE_PATH.dynamicNixOSSystems.$1)"
+        systemDrv="$(taskEval "task: (task.dynamicNixOSSystems.$1 ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath")"
 
         nix-store --realise $systemDrv
         ;;
@@ -66,11 +62,11 @@ let
         echo "Deploying system using Nixus, will rollback if there are any issues"
 
         nixApplyExpr=$(cat <<EOF
-flake:
+task:
   let
-    systemConfig = (flake.dynamicNixOSSystems.$1 ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped)));
+    systemConfig = (task.dynamicNixOSSystems.$1 ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped)));
   in
-  (flake.dynamicDeployScript {
+  (task.dynamicDeployScript {
     out = systemConfig.config.system.build.toplevel;
     args = {
       pkgs = systemConfig.pkgs;
@@ -84,9 +80,7 @@ flake:
 EOF
 )
 
-        deployScriptDrv="$(nix eval --raw \
-          --apply "$nixApplyExpr" \
-          $NIX_TASK_FLAKE_PATH)"
+        deployScriptDrv="$(taskEval "$nixApplyExpr")"
 
         deployScriptOut="$(nix-store --realise $deployScriptDrv)"
 
@@ -106,9 +100,7 @@ EOF
     depsOut="$(taskGetDeps)"
     depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
 
-    nix eval --json \
-      --apply "let inArgs = { deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped); in a: with (a (inArgs)); { out = config.system.build.toplevel; args = builtins.toJSON ({ nixpkgs = pkgs.path; deploy = config.deploy; system = config.system.build.toplevel.system; name = $nameEscaped; systemArgs = inArgs; }); }" \
-      $NIX_TASK_FLAKE_PATH.dynamicNixOSSystems.$1
+    taskEval "let inArgs = { deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped); in task: with (task.dynamicNixOSSystems.$1 (inArgs)); __toJSON ({ out = config.system.build.toplevel; args = builtins.toJSON ({ nixpkgs = pkgs.path; deploy = config.deploy; system = config.system.build.toplevel.system; name = $nameEscaped; systemArgs = inArgs; }); })"
   '';
 
   tfDeployDynamicNixOSSystem = pkgs.writeShellScriptBin "tfDeployDynamicNixOSSystem" ''
@@ -139,7 +131,7 @@ EOF
         nix-copy-closure --to $remote \
           $systemOut
 
-        ssh -o BatchMode=yes "$remote" \
+        ssh -F $HOME/.ssh/config -o BatchMode=yes "$remote" \
           "sudo nix-env -p /nix/var/nix/profiles/system --set $systemOut && sudo $systemOut/bin/switch-to-configuration boot"
 
         echo "Success"
@@ -147,13 +139,13 @@ EOF
       *)
         echo "Deploying system using Nixus, will rollback if there are any issues"
 
-        deployScriptDrv="$(nix eval --impure --raw \
-          --apply "a: (a (builtins.fromJSON $argsJsonEscaped)).$name.drvPath" \
-          $NIX_TASK_FLAKE_PATH.dynamicDeployScript)"
+        deployScriptDrv="$(taskEval "task: (task.dynamicDeployScript (builtins.fromJSON $argsJsonEscaped)).$name.drvPath")"
+
+        echo $deployScriptDrv
 
         deployScriptOut="$(nix-store --realise $deployScriptDrv)"
 
-        ${lib.scripts.configureSSHHost} "$remote" \
+        ${lib.scripts.configureSSHHost}/bin/configureSSHHost "$remote" \
           StrictHostKeyChecking=no UserKnownHostsFile=$(mktemp)
 
         $deployScriptOut
@@ -200,12 +192,12 @@ in
 
   output = {
     dynamicDeployScript = { args, out, remote }:
-      import nixus { deploySystem = args.system; } ({ config, ... }: {
+      import nixus { deploySystem = args.system; hostPkgs = pkgs; } ({ config, ... }: {
         nodes = {
           ${args.name} = ({ lib, config, ... }: ({
             nixpkgs = args.nixpkgs;
             configuration = {
-              _pkgs = if (hasAttr "pkgs" args) then args.pkgs else (import args.nixpkgs {});
+              _pkgs = if (hasAttr "pkgs" args) then args.pkgs else (import args.nixpkgs { system = args.system; });
               system.build.toplevel = out;
             };
           } // (filterAttrs (k: v: k != "diskOptions") args.deploy) // {

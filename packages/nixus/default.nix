@@ -16,5 +16,6 @@ stdenv.mkDerivation {
     cp --no-preserve=mode -r $src $out
     cp --no-preserve=mode ${./default.nix.replacement} $out/default.nix
     cp --no-preserve=mode ${./options.nix.replacement} $out/modules/options.nix
+    cp --no-preserve=mode ${./deploy.nix.replacement} $out/modules/deploy.nix
   '';
 }
