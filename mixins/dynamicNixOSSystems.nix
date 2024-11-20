@@ -58,6 +58,17 @@ let
 
         nix-store --realise $systemDrv
         ;;
+      "deploy-anywhere-yes-i-really-want-to-do-this")
+        # EXPERIMENTAL
+        systemDrv="$(taskEval "task: (task.dynamicNixOSSystems.$1 ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.toplevel.drvPath")"
+        systemPath="$(nix-store --realise $systemDrv)"
+
+        diskoDrv=$(taskEval "task: (task.dynamicNixOSSystems.$1 ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $argsJsonEscaped))).config.system.build.diskoScript.drvPath")
+        diskoPath="$(nix-store --realise $diskoDrv)"
+
+        # TODO is it okay to expect this to be in PATH?
+        nixos-anywhere -s $diskoPath $systemPath "''${@:5}" "$remote"
+        ;;
       *)
         echo "Deploying system using Nixus, will rollback if there are any issues"
 
