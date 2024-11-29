@@ -3,12 +3,14 @@
 with lib;
 with builtins;
 with (import ./util.nix { inherit pkgs; });
+with (import ./terranix.nix { inherit pkgs; });
 
 {
   stableId ? null,
   deps ? {},
   getOutput ? null,
   src,
+  srcNix ? null,
   before ? [],
   backend ? {},
   tfvars ? {},
@@ -107,6 +109,17 @@ let
       ${pkgs.util-linux}/bin/mount --bind $TMPDIR/tfModules /root/tfModules
       '' else ""}
 
+      ${if srcNix != null then
+      ''
+        function reload {
+          taskReloadFlake
+          taskEval "task: builtins.toJSON (task.srcNix {})" > _generated.tf.json
+          echo "Generated tf.json"
+        }
+
+        taskEval "task: builtins.toJSON (task.srcNix {})" > _generated.tf.json
+      '' else ""}
+
       terraform init || true
 
       ${if afterInit != null then (if isFunction afterInit then (afterInit { inherit deps; }) else afterInit) else ""}
@@ -203,4 +216,7 @@ mkTask {
 } else {})
 // (if dynamicNixOSSystems != null && dynamicNixOSSystemVaultSSHRoles != null then {
   inherit dynamicNixOSSystemVaultSSHRoles;
+} else {})
+// (if srcNix != null then {
+  srcNix = {}: (mkTerranixConfiguration { config = (srcNix {}); });
 } else {})
