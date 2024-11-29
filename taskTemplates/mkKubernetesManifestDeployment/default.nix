@@ -37,17 +37,16 @@ let
         rest="$@"
 
         if [ -n "$1" ]; then
-          export additionalArgsJson="$(jo $rest)"
+          additionalArgs="$(jo $rest)"
         else
-          export additionalArgsJson="{}"
+          additionalArgs="{}"
         fi
+        additionalArgsJson="$(jq --null-input -cM --arg additionalArgs "$additionalArgs" '$additionalArgs')"
 
         depsOut="$(taskGetDeps)"
         depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
 
-        nix eval --raw --impure --allow-unsafe-native-code-during-evaluation \
-          --apply "(manifest: manifest ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON(builtins.getEnv \"additionalArgsJson\"))))" \
-          $NIX_TASK_FLAKE_PATH.manifests.$manifestAttr
+        taskEval "task: (manifest: manifest ({ deps = (builtins.fromJSON $depsEscaped); } // (builtins.fromJSON $additionalArgsJson))) task.manifests.$manifestAttr"
       }
 
       kubectlArgs="${_kubectlArgs}"
@@ -64,6 +63,11 @@ let
         ${dryRunScript { inherit deps; }}
       fi
     '';
+
+  getShellHook = { deps }:
+    ''
+      ${initScript { inherit deps; }}
+    '';
 in
 mkTask {
   inherit stableId;
@@ -79,4 +83,6 @@ mkTask {
   ] ++ path;
 
   run = ({ deps }: getRunScript { inherit deps; });
+
+  shellHook = ({ deps }: getShellHook { inherit deps; });
 } // { inherit manifests; }
