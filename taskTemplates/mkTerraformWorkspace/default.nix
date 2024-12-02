@@ -8,6 +8,7 @@ with (import ./terranix.nix { inherit pkgs; });
 {
   stableId ? null,
   deps ? {},
+  tags ? null,
   getOutput ? null,
   src,
   srcNix ? null,
@@ -25,6 +26,7 @@ with (import ./terranix.nix { inherit pkgs; });
   dynamicNixOSSystems ? null,
   dynamicNixOSSystemVaultSSHRoles ? null,
   impureEnvPassthrough ? null,
+  preventDestroy ? false,
 }:
 let
   terraformPkg = terraform.overrideAttrs (oldAttrs: rec {
@@ -110,14 +112,32 @@ let
       '' else ""}
 
       ${if srcNix != null then
+      let
+        generate = ''
+          taskEval "task: builtins.toJSON (task.srcNix { deps = (builtins.fromJSON $depsEscaped); })" > _generated.tf.json
+
+          ${if modules != null then ''
+            ${concatStringsSep "\n" (
+              map (conf: ''
+                mkdir -p ./_nixTfModules/${conf.id}
+                taskEval "task: builtins.toJSON ((task.moduleSrcNix { deps = (builtins.fromJSON $depsEscaped); }).${conf.id})" > ./_nixTfModules/${conf.id}/_generated.tf.json
+              '') (modules { inherit deps; })
+            )}
+          '' else ""}
+        '';
+      in
       ''
+        depsOut="$(taskGetDeps)"
+        depsEscaped="$(jq --null-input -cM --arg deps "$depsOut" '$deps')"
+
         function reload {
           taskReloadFlake
-          taskEval "task: builtins.toJSON (task.srcNix {})" > _generated.tf.json
+          ${generate}
+
           echo "Generated tf.json"
         }
 
-        taskEval "task: builtins.toJSON (task.srcNix {})" > _generated.tf.json
+        ${generate}
       '' else ""}
 
       terraform init || true
@@ -135,6 +155,30 @@ let
       ${getSetupScript { inherit deps; isShellHook = true; }}
 
       ${pkgs.nodejs}/bin/node ${./dynamicNixOSSystemsFromTerraform}/showDeployables.js
+    '';
+
+  getDestroyScript = { deps }:
+    ''
+      ${getSetupScript { inherit deps; }}
+
+      ${if preventDestroy == true then ''
+        echo "This task has preventDestroy set to true"
+        exit 1
+      '' else ''
+        if taskRunShouldApply; then
+          # apply with input=false if terminal is not interactive
+          if [ -t 0 ] ; then
+            terraform destroy
+          else
+            echo "Non-interactive terminal, will destroy immediately"
+            terraform destroy -input=false -auto-approve
+          fi
+        else
+          # if dry run, then only do a terraform plan
+          echo "Only running terraform plan as nix-task is in dry-run mode"
+          terraform plan -destroy
+        fi
+      ''}
     '';
 
   getPlanArgs = { deps }: if planArgs != null then (if isFunction planArgs then (planArgs { inherit deps; }) else planArgs) else "";
@@ -178,6 +222,7 @@ in
 mkTask {
   inherit stableId;
   inherit deps;
+  inherit tags;
   inherit getOutput;
   inherit impureEnvPassthrough;
   dir = src;
@@ -207,6 +252,7 @@ mkTask {
     if needsToBeLazy then ({ deps }: getInitApplyScript { inherit deps; }) else (getInitApplyScript { deps = {}; });
   shellHook =
     if needsToBeLazy then ({ deps }: getShellHook { inherit deps; }) else (getShellHook { deps = {}; });
+  custom.destroy = if needsToBeLazy then ({ deps }: getDestroyScript { inherit deps; }) else (getDestroyScript { deps = {}; });
 }
 // lib.mixins.dynamicNixOSSystems.output
 // (if dynamicNixOSSystems != null then {
@@ -218,5 +264,13 @@ mkTask {
   inherit dynamicNixOSSystemVaultSSHRoles;
 } else {})
 // (if srcNix != null then {
-  srcNix = {}: (mkTerranixConfiguration { config = (srcNix {}); });
+  srcNix = args: (mkTerranixConfiguration { config = (srcNix args); });
+  moduleSrcNix = args: listToAttrs (
+    map (
+      conf: {
+        name = conf.id;
+        value = (mkTerranixConfiguration { config = conf.srcNix; });
+      }
+    ) (if modules != null then modules args else [])
+  );
 } else {})

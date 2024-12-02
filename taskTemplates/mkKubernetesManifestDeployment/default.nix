@@ -5,6 +5,7 @@ with builtins;
 
 {
   stableId ? null,
+  tags ? null,
   deps ? {},
   getOutput ? null,
   before ? [],
@@ -72,6 +73,7 @@ in
 mkTask {
   inherit stableId;
   inherit deps;
+  inherit tags;
   inherit getOutput;
 
   path = with pkgs; [

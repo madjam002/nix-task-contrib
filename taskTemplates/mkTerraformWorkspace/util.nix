@@ -24,7 +24,7 @@ let
             ${if hasAttr "extra" conf then conf.extra else ""}
 
             module "${conf.id}" {
-              source = "${conf.src}"
+              source = "${if (conf.srcNix or null) != null then "./_nixTfModules/${conf.id}" else "${conf.src}"}"
               ${if hasAttr "dependsOn" conf then "depends_on = [${concatStringsSep "," conf.dependsOn}]" else ""}
               ${if hasAttr "config" conf then conf.config else ""}
 
