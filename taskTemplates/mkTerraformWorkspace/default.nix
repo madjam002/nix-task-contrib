@@ -269,7 +269,7 @@ mkTask {
     map (
       conf: {
         name = conf.id;
-        value = (mkTerranixConfiguration { config = conf.srcNix; });
+        value = if (conf.srcNix or null) != null then (mkTerranixConfiguration { config = conf.srcNix; }) else null;
       }
     ) (if modules != null then modules args else [])
   );
