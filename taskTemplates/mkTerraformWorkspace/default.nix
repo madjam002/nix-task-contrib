@@ -181,6 +181,15 @@ let
       ''}
     '';
 
+  getFetchOutputScript = { deps }:
+    ''
+      ${getSetupScript { inherit deps; }}
+
+      ${pkgs.nodejs}/bin/node ${./dynamicNixOSSystemsFromTerraform}/dumpDeployablesForOutput.js > $TMPDIR/deployables
+
+      taskSetOutput "$(terraform output -json | ${pkgs.jq}/bin/jq --argjson deployables "$(cat $TMPDIR/deployables)" '{"dynamicNixOSSystems":$deployables} * with_entries(.value |= .value)')"
+    '';
+
   getPlanArgs = { deps }: if planArgs != null then (if isFunction planArgs then (planArgs { inherit deps; }) else planArgs) else "";
 
   getInitApplyScript = { deps }:
@@ -253,6 +262,7 @@ mkTask {
   shellHook =
     if needsToBeLazy then ({ deps }: getShellHook { inherit deps; }) else (getShellHook { deps = {}; });
   custom.destroy = if needsToBeLazy then ({ deps }: getDestroyScript { inherit deps; }) else (getDestroyScript { deps = {}; });
+  fetchOutput = if needsToBeLazy then ({ deps }: getFetchOutputScript { inherit deps; }) else (getFetchOutputScript { deps = {}; });
 }
 // lib.mixins.dynamicNixOSSystems.output
 // (if dynamicNixOSSystems != null then {
