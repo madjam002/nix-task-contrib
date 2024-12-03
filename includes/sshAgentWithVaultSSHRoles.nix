@@ -29,14 +29,14 @@ roles:
   ${concatStringsSep "\n" (map (sshRoleNameOrAttrs:
     let
       sshRoleName = if isAttrs sshRoleNameOrAttrs then sshRoleNameOrAttrs.role else sshRoleNameOrAttrs;
-      mountPath = (if isAttrs sshRoleNameOrAttrs then (sshRoleNameOrAttrs.mount or null) else null) or "ssh-client";
+      mountPath = if isAttrs sshRoleNameOrAttrs then (sshRoleNameOrAttrs.mount or "ssh-client") else "ssh-client";
       beforeEnv =
         if isAttrs sshRoleNameOrAttrs && (sshRoleNameOrAttrs.vault or null) != null
         then "VAULT_ADDR=${sshRoleNameOrAttrs.vault.address} "
         else "";
     in
     ''
-      ${beforeEnv}${pkgs.vault}/bin/vault write -field=signed_key ssh-client/sign/${sshRoleName} \
+      ${beforeEnv}${pkgs.vault}/bin/vault write -field=signed_key ${mountPath}/sign/${sshRoleName} \
         public_key=@$keys/id_rsa.pub > $keys/id_rsa-cert.pub
 
       ssh-keygen -Lf $keys/id_rsa-cert.pub
