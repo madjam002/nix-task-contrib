@@ -22,6 +22,7 @@ with (import ./terranix.nix { inherit pkgs; });
   linkModules ? null,
   afterInit ? null,
   beforeApply ? null,
+  afterPlanApply ? null,
   planArgs ? null,
   dynamicNixOSSystems ? null,
   dynamicNixOSSystemVaultSSHRoles ? null,
@@ -211,6 +212,8 @@ let
         echo "Only running terraform plan as nix-task is in dry-run mode"
         terraform plan ${getPlanArgs { inherit deps; }}
       fi
+
+      ${if afterPlanApply != null then (if isFunction afterPlanApply then (afterPlanApply { inherit deps; }) else afterPlanApply) else ""}
 
       ${pkgs.nodejs}/bin/node ${./dynamicNixOSSystemsFromTerraform}/dumpDeployablesForOutput.js > $TMPDIR/deployables
 
