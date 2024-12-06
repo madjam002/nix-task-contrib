@@ -19,6 +19,9 @@ with builtins;
     MANIFEST=`renderManifest default`
     echo "$MANIFEST" | kubectl apply $kubectlArgs --dry-run=server --wait -f -
   '',
+  afterApply ? null,
+  fetchOutput ? null,
+  custom ? {},
   path ? [],
 }:
 let
@@ -63,6 +66,8 @@ let
         echo "Running dry-run script as nix-task is in dry-run mode"
         ${dryRunScript { inherit deps; }}
       fi
+
+      ${if afterApply != null then afterApply { inherit deps; } else ""}
     '';
 
   getShellHook = { deps }:
@@ -87,4 +92,7 @@ mkTask {
   run = ({ deps }: getRunScript { inherit deps; });
 
   shellHook = ({ deps }: getShellHook { inherit deps; });
+
+  inherit fetchOutput;
+  inherit custom;
 } // { inherit manifests; }
