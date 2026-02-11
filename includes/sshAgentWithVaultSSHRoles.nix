@@ -22,7 +22,7 @@ roles:
 
     chmod 0600 $keys/*
 
-    eval "$(ssh-agent)"
+    eval "$(ssh-agent -T)" # use -T flag to put in temporary directory, otherwise NixOS 25.11 OpenSSH 10.1 puts it in the home directory, and the path is too long for a unix socket
     taskRunFinally "${pkgs.openssh}/bin/ssh-agent -k"
   fi
 
