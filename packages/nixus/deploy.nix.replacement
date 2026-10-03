@@ -50,6 +50,22 @@ let
         '';
       };
 
+      rebootOnFailedRollback = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Whether the host should reboot into the previous system if, after a
+          failed deploy has rolled it back, the deploying machine still can't
+          confirm it can reach the host within `successTimeout`.
+
+          This is a last resort for a deploy that cut the host off from the
+          network, and is only worth enabling on hosts that can't otherwise be
+          hard reset. It also fires whenever the deploy is cancelled or loses
+          its connection part way through a switch, so it can reboot a host
+          that was perfectly healthy.
+        '';
+      };
+
       deployFrom = lib.mkOption {
         description = ''
           When deploying from a specific hostname given by the `deployHost` option,
@@ -135,7 +151,7 @@ let
       nodeName = name;
       nodeConfig = config;
       switch = pkgs.runCommandNoCC "switch" {
-        inherit (nodeConfig) switchTimeout successTimeout ignoreFailingSystemdUnits privilegeEscalationCommand;
+        inherit (nodeConfig) switchTimeout successTimeout ignoreFailingSystemdUnits rebootOnFailedRollback privilegeEscalationCommand;
         shell = pkgs.runtimeShell;
       } ''
         mkdir -p $out/bin
@@ -327,6 +343,10 @@ in {
           id=$(ssh "''${sshOpts[@]}" -o BatchMode=yes "$HOST" exec "${nodeConfig.closurePaths.switch}/bin/switch" start "${nodeConfig.closurePaths.system}")
 
           echo "Trying to confirm success..." >&2
+          # The host finishes switching or rolling back by itself well within this (each switch-to-configuration
+          # call is capped at switchTimeout, and each wait for confirmation at successTimeout), plus time to reboot
+          # if it's allowed to. If we still can't reach it after that, polling any longer won't help
+          giveUpAt=$(( SECONDS + ${toString (4 * nodeConfig.switchTimeout + 2 * nodeConfig.successTimeout + (if nodeConfig.rebootOnFailedRollback then 600 else 120))} ))
           active=1
           while [ "$active" != 0 ]; do
             # TODO: Because of the imperative network-setup script, when e.g. the
@@ -337,6 +357,12 @@ in {
             status=$(timeout --foreground 15 ssh "''${sshOpts[@]}" -o ControlPath=none -o BatchMode=yes "$HOST" exec "${nodeConfig.closurePaths.switch}/bin/switch" active "$id")
             active=$?
             set -e
+            # 0 and 1 come from the switcher itself (done and still in progress), anything else means we couldn't reach it
+            if [ "$active" != 0 ] && [ "$active" != 1 ] && (( SECONDS > giveUpAt )); then
+              echo -e "\e[31mStill unable to reach the host, which should have finished switching or rolling back by now\e[0m" >&2
+              echo -e "\e[31mThe deploy has probably cut it off from the network, so it may need a hard reset\e[0m" >&2
+              exit 1
+            fi
             sleep 1
           done
 
