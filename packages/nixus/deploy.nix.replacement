@@ -170,7 +170,8 @@ let
 
       # TOOD: Prevent garbage collection of closures until the end of the deploy
       preparationPhases.copyClosure = lib.dag.entryAnywhere ''
-        if NIX_SSH_OPTS="-o ServerAliveInterval=15" nix-copy-closure \
+        # sshOpts is set by the deploy script that sources this
+        if NIX_SSHOPTS="-o ServerAliveInterval=15 ''${sshOpts[*]}" nix-copy-closure \
           ${if nodeConfig.hasFastConnection then "-s" else ""} \
           --to ${lib.escapeShellArg nodeConfig.host} \
           ${lib.escapeShellArgs (lib.attrValues nodeConfig.closurePaths)}; then
@@ -249,6 +250,15 @@ in {
           rsync
         ])}''${PATH:+:$PATH}
 
+      # nix-task runs each task with its own HOME, and configureSSHHost writes the per-host options
+      # (e.g. StrictHostKeyChecking=no for a freshly installed machine) to $HOME/.ssh/config. ssh only
+      # reads ~/.ssh/config from the home directory in the passwd database, not $HOME, so those options
+      # would be ignored unless the file is passed explicitly
+      sshOpts=()
+      if [ -f "$HOME/.ssh/config" ]; then
+        sshOpts=(-F "$HOME/.ssh/config")
+      fi
+
       # Kill all child processes when interrupting/exiting
       trap exit INT TERM
       trap 'for pid in $(jobs -p) ; do kill -- -$pid ; done' EXIT
@@ -302,7 +312,7 @@ in {
           echo "Deploying.." >&2
 
           if ! OLDSYSTEM=$(timeout --foreground 30 \
-              ssh -o ControlPath=none -o BatchMode=yes "$HOST" realpath /run/current-system\
+              ssh "''${sshOpts[@]}" -o ControlPath=none -o BatchMode=yes "$HOST" realpath /run/current-system\
             ); then
             echo "Unable to connect to host!" >&2
             exit 1
@@ -314,7 +324,7 @@ in {
           fi
 
           echo "Triggering system switcher..." >&2
-          id=$(ssh -o BatchMode=yes "$HOST" exec "${nodeConfig.closurePaths.switch}/bin/switch" start "${nodeConfig.closurePaths.system}")
+          id=$(ssh "''${sshOpts[@]}" -o BatchMode=yes "$HOST" exec "${nodeConfig.closurePaths.switch}/bin/switch" start "${nodeConfig.closurePaths.system}")
 
           echo "Trying to confirm success..." >&2
           active=1
@@ -324,7 +334,7 @@ in {
             # a rebuild switch, even though with a reboot it wouldn't. Maybe use
             # the more modern and declarative networkd to get around this
             set +e
-            status=$(timeout --foreground 15 ssh -o ControlPath=none -o BatchMode=yes "$HOST" exec "${nodeConfig.closurePaths.switch}/bin/switch" active "$id")
+            status=$(timeout --foreground 15 ssh "''${sshOpts[@]}" -o ControlPath=none -o BatchMode=yes "$HOST" exec "${nodeConfig.closurePaths.switch}/bin/switch" active "$id")
             active=$?
             set -e
             sleep 1
