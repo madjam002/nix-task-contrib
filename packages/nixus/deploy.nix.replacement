@@ -372,10 +372,11 @@ in {
               ;;
             "failure")
               echo -e "\e[31mFailed to activate new system! Rolled back to previous one\e[0m" >&2
-              echo -e "\e[31mRun the following command to see the logs for the switch:\e[0m" >&2
-              echo -e "\e[31mssh ''${HOST@Q} ${builtins.concatStringsSep " " nodeConfig.privilegeEscalationCommand} cat /var/lib/system-switcher/system-$id/log\e[0m" >&2
+              echo -e "\e[31mThe switch's log, from ssh ''${HOST@Q} ${builtins.concatStringsSep " " nodeConfig.privilegeEscalationCommand} cat /var/lib/system-switcher/system-$id/log:\e[0m" >&2
+              timeout --foreground 30 ssh "''${sshOpts[@]}" -o ControlPath=none -o BatchMode=yes "$HOST" \
+                ${builtins.concatStringsSep " " nodeConfig.privilegeEscalationCommand} cat "/var/lib/system-switcher/system-$id/log" >&2 \
+                || echo "(couldn't fetch it)" >&2
               exit 1
-              # TODO: Try to better show what failed
               ;;
             *)
               echo -e "\e[31mThis shouldn't occur, the status is $status!\e[0m" >&2
