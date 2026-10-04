@@ -123,7 +123,9 @@ EOF
     mode="$3"
     args="$args"
 
-    systemDrv="$(nix show-derivation $system | jq -r 'keys[0]')"
+    # nix 2.33+ wraps the derivations in {"derivations": ..., "version": ...}, keyed by name without the store directory
+    systemDrv="$(nix derivation show "$system" | jq -r '(.derivations // .) | keys[0]')"
+    [[ $systemDrv == /* ]] || systemDrv="''${system%/*}/$systemDrv"
 
     # make sure system is built and realised first
     nix-store --realise $systemDrv
