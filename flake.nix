@@ -37,7 +37,7 @@
                     mkTerraformWorkspace = import ./taskTemplates/mkTerraformWorkspace { inherit pkgs; inherit lib; };
                   };
                   scripts = {
-                    configureSSHHost = pkgs.writeShellScriptBin "configureSSHHost" "${pkgs.nodePackages.zx}/bin/zx ${./scripts/configureSSHHost.mjs} $@";
+                    configureSSHHost = pkgs.writeShellScriptBin "configureSSHHost" "${pkgs.zx or pkgs.nodePackages.zx}/bin/zx ${./scripts/configureSSHHost.mjs} $@";
                   };
                 };
               in
