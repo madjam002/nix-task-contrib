@@ -35,7 +35,7 @@ app.post('*', async (req, res) => {
     '/v1' + req.url,
     {
       data: {
-        tfstate: JSON.stringify(req.body, null, 2),
+        tfstate: JSON.stringify(req.body),
       },
     },
     {
